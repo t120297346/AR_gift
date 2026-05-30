@@ -151,13 +151,13 @@
 
         <!--
           預留透明背景影片：取消註解後會與圖片一起出現在 target 上方。
-          <a-video
-            src="#danceVideo"
-            position="0 0.18 0.01"
-            width="1.1"
-            height="1.1"
-            rotation="0 0 0"></a-video>
-        -->
+	-->
+        <a-video
+          src="#danceVideo"
+          position="0 0.18 0.01"
+          width="1.1"
+          height="1.1"
+          rotation="0 0 0"></a-video>
       </a-entity>
     </a-scene>
 
@@ -189,9 +189,9 @@
           await mindarSystem.start();
 
           // 啟用透明背景影片時可取消註解：
-          // if (danceVideoEl) {
-          //   await danceVideoEl.play();
-          // }
+          if (danceVideoEl) {
+            await danceVideoEl.play();
+          }
 
           setStatus("Scanning... 請將相機對準 target image");
         } catch (error) {
