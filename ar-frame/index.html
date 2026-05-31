@@ -130,6 +130,7 @@
           webkit-playsinline
           crossorigin="anonymous"></video>
 	-->
+	<!--
 	<video
   	  id="danceVideo"
 	  preload="auto"
@@ -149,6 +150,17 @@
 	    type="video/quicktime">
 	  
 	</video>
+	-->
+	<video
+	  id="danceVideo"
+	  src="./assets/dance.mp4"
+	  preload="auto"
+	  loop
+	  muted
+	  playsinline
+	  webkit-playsinline
+	  crossorigin="anonymous">
+	</video>
       </a-assets>
 
       <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
@@ -160,13 +172,14 @@
           - position="x y z"：控制圖片位置；y 越大越上方。
           - rotation：控制旋轉角度。
         -->
+	<!--
         <a-image
           src="#endFrame"
           position="0 0.18 0"
           width="1.1"
           height="1.1"
           rotation="0 0 0"></a-image>
-
+	-->
         <!--
           預留透明背景影片：取消註解後會與圖片一起出現在 target 上方。
 	-->
