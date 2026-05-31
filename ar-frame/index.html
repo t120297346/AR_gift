@@ -120,7 +120,6 @@
           1. 取消下方 <video> 與 target 內 <a-video> 的註解。
           2. 依需求調整 <a-video> 的 width、height、position。
           3. 若手機沒有自動播放，確認影片有 muted、playsinline，並在 Start AR 點擊後呼叫 play()。
-	-->
         <video
           id="danceVideo"
           src="./assets/dance.webm"
@@ -130,6 +129,25 @@
           playsinline
           webkit-playsinline
           crossorigin="anonymous"></video>
+	-->
+	<video
+  	  id="danceVideo"
+	  preload="auto"
+	  loop
+	  muted
+	  playsinline
+	  webkit-playsinline
+	  crossorigin="anonymous">
+
+	  <source
+	    src="./assets/dance.webm"
+	    type="video/webm">
+
+	  <source
+	    src="./assets/output.mov"
+	    type="video/quicktime">
+
+	</video>
       </a-assets>
 
       <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
