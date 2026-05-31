@@ -156,7 +156,6 @@
 	  src="./assets/dance.mp4"
 	  preload="auto"
 	  loop
-	  muted
 	  playsinline
 	  webkit-playsinline
 	  crossorigin="anonymous">
@@ -220,9 +219,9 @@
           await mindarSystem.start();
 
           // 啟用透明背景影片時可取消註解：
-          if (danceVideoEl) {
-            await danceVideoEl.play();
-          }
+          // if (danceVideoEl) {
+          //  await danceVideoEl.play();
+          //}
 
           setStatus("Scanning... 請將相機對準 target image");
         } catch (error) {
@@ -235,12 +234,20 @@
 
       startButtonEl.addEventListener("click", startAR, { once: false });
 
-      targetEl.addEventListener("targetFound", () => {
+      targetEl.addEventListener("targetFound", async () => {
         setStatus("Target found");
+	if (danceVideoEl) {
+	  danceVideoEl.currentTime = 0; // 每次掃到從頭播
+	  danceVideoEl.muted = false;
+	  await danceVideoEl.play();
+	}
       });
 
       targetEl.addEventListener("targetLost", () => {
         setStatus("Scanning... 請將相機對準 target image");
+	if (danceVideoEl) {
+	  danceVideoEl.pause();
+	}
       });
     </script>
   </body>
