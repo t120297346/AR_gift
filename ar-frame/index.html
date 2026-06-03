@@ -48,12 +48,12 @@
         flex-direction: column;
         align-items: center;
         justify-content: center;
-        gap: 16px;
+        gap: 14px;
         padding: 24px;
         box-sizing: border-box;
         text-align: center;
         pointer-events: none;
-        background: linear-gradient(180deg, rgba(0, 0, 0, 0.55), rgba(0, 0, 0, 0.2));
+        background: linear-gradient(180deg, rgba(0, 0, 0, 0.65), rgba(0, 0, 0, 0.25));
       }
 
       .overlay.is-running {
@@ -75,7 +75,14 @@
         -webkit-backdrop-filter: blur(10px);
       }
 
-      #startButton {
+      .buttonGroup {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        pointer-events: auto;
+      }
+
+      .startButton {
         appearance: none;
         border: 0;
         border-radius: 999px;
@@ -86,23 +93,40 @@
         font-weight: 700;
         letter-spacing: 0.02em;
         cursor: pointer;
-        pointer-events: auto;
         box-shadow: 0 12px 36px rgba(0, 0, 0, 0.35);
       }
 
-      #startButton:active {
+      .startButton.secondary {
+        color: #fff;
+        background: rgba(255, 255, 255, 0.2);
+        border: 1px solid rgba(255, 255, 255, 0.35);
+        backdrop-filter: blur(8px);
+        -webkit-backdrop-filter: blur(8px);
+      }
+
+      .startButton:active {
         transform: scale(0.98);
       }
 
-      #startButton[hidden] {
+      .buttonGroup[hidden] {
         display: none;
       }
     </style>
   </head>
+
   <body>
     <div id="overlay" class="overlay">
-      <p id="statusText">請點擊 Start AR 開啟相機</p>
-      <button id="startButton" type="button">Start AR</button>
+      <p id="statusText">請選擇啟動方式</p>
+
+      <div id="buttonGroup" class="buttonGroup">
+        <button id="startSoundButton" class="startButton" type="button">
+          Start AR 開啟聲音
+        </button>
+
+        <button id="startMutedButton" class="startButton secondary" type="button">
+          Start AR 靜音播放
+        </button>
+      </div>
     </div>
 
     <a-scene
@@ -112,82 +136,48 @@
       vr-mode-ui="enabled: false"
       device-orientation-permission-ui="enabled: false"
       embedded>
+
       <a-assets>
         <img id="endFrame" src="./assets/end_frame.jpg" alt="AR frame overlay" />
 
         <!--
-          預留透明背景影片素材。要啟用時：
-          1. 取消下方 <video> 與 target 內 <a-video> 的註解。
-          2. 依需求調整 <a-video> 的 width、height、position。
-          3. 若手機沒有自動播放，確認影片有 muted、playsinline，並在 Start AR 點擊後呼叫 play()。
+          iPhone Safari 重點：
+          1. 一開始保留 muted，讓影片可以安全載入與作為 WebGL texture。
+          2. 使用者點擊「Start AR 開啟聲音」後，才嘗試解除靜音。
+          3. playsinline / webkit-playsinline 避免 iPhone 強制全螢幕播放。
+        -->
         <video
           id="danceVideo"
-          src="./assets/dance.webm"
+          src="./assets/dance.mp4"
           preload="auto"
           loop
           muted
           playsinline
           webkit-playsinline
-          crossorigin="anonymous"></video>
-	-->
-	<!--
-	<video
-  	  id="danceVideo"
-	  preload="auto"
-	  loop
-	  muted
-	  playsinline
-	  webkit-playsinline
-	  crossorigin="anonymous">
-	  
-	  
-	  <source
-	    src="./assets/dance.webm"
-	    type="video/webm">
-	  
-	  <source
-	    src="./assets/dance.mov"
-	    type="video/quicktime">
-	  
-	</video>
-	-->
-	<video
-	  id="danceVideo"
-	  src="./assets/dance.mp4"
-	  preload="auto"
-	  loop
-	  playsinline
-	  webkit-playsinline
-	  crossorigin="anonymous">
-	</video>
+          crossorigin="anonymous">
+        </video>
       </a-assets>
 
       <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
 
       <a-entity id="target" mindar-image-target="targetIndex: 0">
-        <!--
-          調整 AR 圖片：
-          - width / height：控制圖片大小。
-          - position="x y z"：控制圖片位置；y 越大越上方。
-          - rotation：控制旋轉角度。
-        -->
-	<!--
+        <!-- 如果之後還想放底圖，可以取消這段註解
         <a-image
           src="#endFrame"
           position="0 0.18 0"
           width="1.1"
           height="1.1"
-          rotation="0 0 0"></a-image>
-	-->
-        <!--
-          預留透明背景影片：取消註解後會與圖片一起出現在 target 上方。
-	-->
+          rotation="0 0 0">
+        </a-image>
+        -->
+
         <a-video
           src="#danceVideo"
           position="0 0.18 0.01"
           width="1.1"
           height="1.1"
-          rotation="0 0 0"></a-video>
+          rotation="0 0 0">
+        </a-video>
       </a-entity>
     </a-scene>
 
@@ -196,15 +186,61 @@
       const targetEl = document.querySelector("#target");
       const overlayEl = document.querySelector("#overlay");
       const statusTextEl = document.querySelector("#statusText");
-      const startButtonEl = document.querySelector("#startButton");
+      const buttonGroupEl = document.querySelector("#buttonGroup");
+      const startSoundButtonEl = document.querySelector("#startSoundButton");
+      const startMutedButtonEl = document.querySelector("#startMutedButton");
       const danceVideoEl = document.querySelector("#danceVideo");
+
+      let soundEnabled = false;
+      let arStarted = false;
 
       const setStatus = (message) => {
         statusTextEl.textContent = message;
       };
 
-      const startAR = async () => {
-        startButtonEl.hidden = true;
+      const unlockVideo = async () => {
+        if (!danceVideoEl) return;
+
+        /*
+          先嘗試依照使用者選擇播放：
+          - soundEnabled = true：嘗試有聲播放
+          - soundEnabled = false：靜音播放
+
+          如果 iPhone Safari 還是擋住有聲播放，就自動改成靜音，
+          避免整個 AR 影片不顯示。
+        */
+        danceVideoEl.muted = !soundEnabled;
+        danceVideoEl.playsInline = true;
+
+        try {
+          await danceVideoEl.play();
+          danceVideoEl.pause();
+          danceVideoEl.currentTime = 0;
+        } catch (err) {
+          console.warn("Video unlock with sound failed, fallback to muted:", err);
+
+          soundEnabled = false;
+          danceVideoEl.muted = true;
+
+          try {
+            await danceVideoEl.play();
+            danceVideoEl.pause();
+            danceVideoEl.currentTime = 0;
+          } catch (mutedErr) {
+            console.warn("Muted video unlock also failed:", mutedErr);
+          }
+
+          setStatus("手機阻擋聲音，已改為靜音播放");
+        }
+      };
+
+      const startAR = async (enableSound) => {
+        if (arStarted) return;
+
+        arStarted = true;
+        soundEnabled = enableSound;
+
+        buttonGroupEl.hidden = true;
         overlayEl.classList.add("is-running");
         setStatus("Loading AR...");
 
@@ -215,39 +251,71 @@
             });
           }
 
+          /*
+            這段很重要：
+            必須在使用者點擊按鈕後呼叫 play()，
+            iPhone 才比較願意允許之後影片播放。
+          */
+          await unlockVideo();
+
           const mindarSystem = sceneEl.systems["mindar-image-system"];
           await mindarSystem.start();
-
-          // 啟用透明背景影片時可取消註解：
-          // if (danceVideoEl) {
-          //  await danceVideoEl.play();
-          //}
 
           setStatus("Scanning... 請將相機對準 target image");
         } catch (error) {
           console.error(error);
-          startButtonEl.hidden = false;
+
+          arStarted = false;
+          buttonGroupEl.hidden = false;
           overlayEl.classList.remove("is-running");
           setStatus("無法開啟相機，請檢查瀏覽器相機權限與 HTTPS 設定。");
         }
       };
 
-      startButtonEl.addEventListener("click", startAR, { once: false });
+      startSoundButtonEl.addEventListener("click", () => {
+        startAR(true);
+      });
+
+      startMutedButtonEl.addEventListener("click", () => {
+        startAR(false);
+      });
 
       targetEl.addEventListener("targetFound", async () => {
-        setStatus("Target found");
-	if (danceVideoEl) {
-	  danceVideoEl.currentTime = 0; // 每次掃到從頭播
-	  danceVideoEl.muted = false;
-	  await danceVideoEl.play();
-	}
+        setStatus(soundEnabled ? "Target found，影片播放中" : "Target found，靜音播放中");
+
+        if (!danceVideoEl) return;
+
+        danceVideoEl.currentTime = 0;
+        danceVideoEl.muted = !soundEnabled;
+
+        try {
+          await danceVideoEl.play();
+        } catch (err) {
+          console.warn("Video play failed on targetFound, fallback to muted:", err);
+
+          /*
+            如果使用者選擇有聲，但 iPhone 仍然擋住，
+            就退回靜音播放，至少確保畫面出得來。
+          */
+          soundEnabled = false;
+          danceVideoEl.muted = true;
+
+          try {
+            await danceVideoEl.play();
+            setStatus("Target found，但手機阻擋聲音，已改為靜音播放");
+          } catch (mutedErr) {
+            console.warn("Muted video play failed:", mutedErr);
+            setStatus("Target found，但影片播放被手機阻擋");
+          }
+        }
       });
 
       targetEl.addEventListener("targetLost", () => {
         setStatus("Scanning... 請將相機對準 target image");
-	if (danceVideoEl) {
-	  danceVideoEl.pause();
-	}
+
+        if (danceVideoEl) {
+          danceVideoEl.pause();
+        }
       });
     </script>
   </body>
