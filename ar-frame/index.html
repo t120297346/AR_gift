@@ -74,6 +74,9 @@
         backdrop-filter: blur(10px);
         -webkit-backdrop-filter: blur(10px);
       }
+      #statusText.is-hidden {
+        display: none;
+      }
 
       .buttonGroup {
         display: flex;
@@ -138,24 +141,22 @@
       embedded>
 
       <a-assets>
-        <!-- Target A 掃到時播放的影片 -->
+        <!-- Target A 掃到時播放的影片：不要加 loop，因為我們用 JS 控制 loop delay -->
         <video
           id="videoA"
           src="./assets/video_a.mp4"
           preload="auto"
-          loop
           muted
           playsinline
           webkit-playsinline
           crossorigin="anonymous">
         </video>
 
-        <!-- Target B 掃到時播放的影片 -->
+        <!-- Target B 掃到時播放的影片：不要加 loop，因為我們用 JS 控制 loop delay -->
         <video
           id="videoB"
           src="./assets/video_b.mp4"
           preload="auto"
-          loop
           muted
           playsinline
           webkit-playsinline
@@ -209,20 +210,53 @@
       const videoBEl = document.querySelector("#videoB");
       const videoEls = [videoAEl, videoBEl];
 
+      // 影片播完後，等待多久才重播。3000 = 3 秒。
+      const LOOP_DELAY_MS = 3000;
+
       let soundEnabled = false;
       let arStarted = false;
       let activeVideoEl = null;
 
+      const targetVisible = new Map();
+      const loopTimers = new Map();
+
+      const showStatus = () => {
+        statusTextEl.classList.remove("is-hidden");
+      };
+
+      const hideStatus = () => {
+        statusTextEl.classList.add("is-hidden");
+      };
+
       const setStatus = (message) => {
+        showStatus();
         statusTextEl.textContent = message;
       };
 
+      const clearLoopTimer = (videoEl) => {
+        const timer = loopTimers.get(videoEl);
+
+        if (timer) {
+          clearTimeout(timer);
+          loopTimers.delete(videoEl);
+        }
+      };
+
+      const clearAllLoopTimers = () => {
+        for (const videoEl of videoEls) {
+          clearLoopTimer(videoEl);
+        }
+      };
+
       const pauseAllVideos = () => {
+        clearAllLoopTimers();
+
         for (const videoEl of videoEls) {
           if (!videoEl) continue;
           videoEl.pause();
           videoEl.currentTime = 0;
         }
+
         activeVideoEl = null;
       };
 
@@ -289,37 +323,67 @@
         }
       };
 
-      const playVideoForTarget = async (videoEl, label) => {
+      const playVideoElement = async (videoEl, label, isReplay = false) => {
         if (!videoEl) return;
-
-        pauseAllVideos();
 
         activeVideoEl = videoEl;
         videoEl.currentTime = 0;
         videoEl.muted = !soundEnabled;
 
-        setStatus(soundEnabled ? `${label} found，影片播放中` : `${label} found，靜音播放中`);
+        hideStatus();
 
         try {
           await videoEl.play();
         } catch (err) {
-          console.warn("Video play failed on targetFound, fallback to muted:", err);
+          console.warn("Video play failed, fallback to muted:", err);
 
           soundEnabled = false;
           videoEl.muted = true;
 
           try {
             await videoEl.play();
-            setStatus(`${label} found，但手機阻擋聲音，已改為靜音播放`);
+            hideStatus();
           } catch (mutedErr) {
             console.warn("Muted video play failed:", mutedErr);
-            setStatus(`${label} found，但影片播放被手機阻擋`);
+            setStatus(`${label} 影片播放被手機阻擋`);
           }
         }
       };
 
+      const scheduleDelayedLoop = (videoEl, targetEl, label) => {
+        if (!videoEl || !targetEl) return;
+
+        clearLoopTimer(videoEl);
+
+        if (!targetVisible.get(targetEl)) return;
+
+        hideStatus();
+        
+        const timer = setTimeout(async () => {
+          loopTimers.delete(videoEl);
+
+          // 只有 target 還在畫面上，才會重播。
+          if (!targetVisible.get(targetEl)) return;
+
+          await playVideoElement(videoEl, label, true);
+        }, LOOP_DELAY_MS);
+
+        loopTimers.set(videoEl, timer);
+      };
+
+      const playVideoForTarget = async (videoEl, label) => {
+        if (!videoEl) return;
+
+        pauseAllVideos();
+        await playVideoElement(videoEl, label, false);
+      };
+
       const pauseVideoForTarget = (videoEl) => {
-        if (videoEl && activeVideoEl === videoEl) {
+        if (!videoEl) return;
+
+        clearLoopTimer(videoEl);
+
+        if (activeVideoEl === videoEl) {
           videoEl.pause();
           activeVideoEl = null;
           setStatus("Scanning... 請將相機對準生日卡片或照片");
@@ -335,19 +399,31 @@
       });
 
       targetAEl.addEventListener("targetFound", () => {
+        targetVisible.set(targetAEl, true);
         playVideoForTarget(videoAEl, "Target A");
       });
 
       targetAEl.addEventListener("targetLost", () => {
+        targetVisible.set(targetAEl, false);
         pauseVideoForTarget(videoAEl);
       });
 
       targetBEl.addEventListener("targetFound", () => {
+        targetVisible.set(targetBEl, true);
         playVideoForTarget(videoBEl, "Target B");
       });
 
       targetBEl.addEventListener("targetLost", () => {
+        targetVisible.set(targetBEl, false);
         pauseVideoForTarget(videoBEl);
+      });
+
+      videoAEl.addEventListener("ended", () => {
+        scheduleDelayedLoop(videoAEl, targetAEl, "Target A");
+      });
+
+      videoBEl.addEventListener("ended", () => {
+        scheduleDelayedLoop(videoBEl, targetBEl, "Target B");
       });
     </script>
   </body>
