@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="theme-color" content="#000000" />
-    <title>AR Frame Gift</title>
+    <title>Birthday AR Gift</title>
 
     <!-- A-Frame 1.5.0 + MindAR Image Tracking -->
     <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
@@ -130,7 +130,7 @@
     </div>
 
     <a-scene
-      mindar-image="imageTargetSrc: ./targets/frame.mind; autoStart: false; uiLoading: no; uiScanning: no; uiError: no;"
+      mindar-image="imageTargetSrc: ./targets/birthday_targets.mind; autoStart: false; uiLoading: no; uiScanning: no; uiError: no;"
       color-space="sRGB"
       renderer="colorManagement: true; physicallyCorrectLights: true; antialias: true; alpha: true"
       vr-mode-ui="enabled: false"
@@ -138,17 +138,22 @@
       embedded>
 
       <a-assets>
-        <img id="endFrame" src="./assets/end_frame.jpg" alt="AR frame overlay" />
-
-        <!--
-          iPhone Safari 重點：
-          1. 一開始保留 muted，讓影片可以安全載入與作為 WebGL texture。
-          2. 使用者點擊「Start AR 開啟聲音」後，才嘗試解除靜音。
-          3. playsinline / webkit-playsinline 避免 iPhone 強制全螢幕播放。
-        -->
+        <!-- Target A 掃到時播放的影片 -->
         <video
-          id="danceVideo"
-          src="./assets/dance.mp4"
+          id="videoA"
+          src="./assets/video_a.mp4"
+          preload="auto"
+          loop
+          muted
+          playsinline
+          webkit-playsinline
+          crossorigin="anonymous">
+        </video>
+
+        <!-- Target B 掃到時播放的影片 -->
+        <video
+          id="videoB"
+          src="./assets/video_b.mp4"
           preload="auto"
           loop
           muted
@@ -160,22 +165,30 @@
 
       <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
 
-      <a-entity id="target" mindar-image-target="targetIndex: 0">
-        <!-- 如果之後還想放底圖，可以取消這段註解
-        <a-image
-          src="#endFrame"
-          position="0 0.18 0"
-          width="1.1"
-          height="1.1"
-          rotation="0 0 0">
-        </a-image>
-        -->
-
+      <!--
+        targetIndex: 0 = 你在 MindAR Compiler 裡放的第一張圖片
+        掃描第一張圖片時，播放 video_a.mp4
+      -->
+      <a-entity id="targetA" mindar-image-target="targetIndex: 0">
         <a-video
-          src="#danceVideo"
-          position="0 0.18 0.01"
-          width="1.1"
-          height="1.1"
+          src="#videoA"
+          position="0 0.01 0.01"
+          width="1.0"
+          height="1.4"
+          rotation="0 0 0">
+        </a-video>
+      </a-entity>
+
+      <!--
+        targetIndex: 1 = 你在 MindAR Compiler 裡放的第二張圖片
+        掃描第二張圖片時，播放 video_b.mp4
+      -->
+      <a-entity id="targetB" mindar-image-target="targetIndex: 1">
+        <a-video
+          src="#videoB"
+          position="0 0.0 0.01"
+          width="1.02"
+          height="1.5"
           rotation="0 0 0">
         </a-video>
       </a-entity>
@@ -183,54 +196,63 @@
 
     <script>
       const sceneEl = document.querySelector("a-scene");
-      const targetEl = document.querySelector("#target");
       const overlayEl = document.querySelector("#overlay");
       const statusTextEl = document.querySelector("#statusText");
       const buttonGroupEl = document.querySelector("#buttonGroup");
       const startSoundButtonEl = document.querySelector("#startSoundButton");
       const startMutedButtonEl = document.querySelector("#startMutedButton");
-      const danceVideoEl = document.querySelector("#danceVideo");
+
+      const targetAEl = document.querySelector("#targetA");
+      const targetBEl = document.querySelector("#targetB");
+
+      const videoAEl = document.querySelector("#videoA");
+      const videoBEl = document.querySelector("#videoB");
+      const videoEls = [videoAEl, videoBEl];
 
       let soundEnabled = false;
       let arStarted = false;
+      let activeVideoEl = null;
 
       const setStatus = (message) => {
         statusTextEl.textContent = message;
       };
 
-      const unlockVideo = async () => {
-        if (!danceVideoEl) return;
+      const pauseAllVideos = () => {
+        for (const videoEl of videoEls) {
+          if (!videoEl) continue;
+          videoEl.pause();
+          videoEl.currentTime = 0;
+        }
+        activeVideoEl = null;
+      };
 
-        /*
-          先嘗試依照使用者選擇播放：
-          - soundEnabled = true：嘗試有聲播放
-          - soundEnabled = false：靜音播放
+      const unlockVideos = async () => {
+        for (const videoEl of videoEls) {
+          if (!videoEl) continue;
 
-          如果 iPhone Safari 還是擋住有聲播放，就自動改成靜音，
-          避免整個 AR 影片不顯示。
-        */
-        danceVideoEl.muted = !soundEnabled;
-        danceVideoEl.playsInline = true;
-
-        try {
-          await danceVideoEl.play();
-          danceVideoEl.pause();
-          danceVideoEl.currentTime = 0;
-        } catch (err) {
-          console.warn("Video unlock with sound failed, fallback to muted:", err);
-
-          soundEnabled = false;
-          danceVideoEl.muted = true;
+          videoEl.muted = !soundEnabled;
+          videoEl.playsInline = true;
 
           try {
-            await danceVideoEl.play();
-            danceVideoEl.pause();
-            danceVideoEl.currentTime = 0;
-          } catch (mutedErr) {
-            console.warn("Muted video unlock also failed:", mutedErr);
-          }
+            await videoEl.play();
+            videoEl.pause();
+            videoEl.currentTime = 0;
+          } catch (err) {
+            console.warn("Video unlock with sound failed, fallback to muted:", err);
 
-          setStatus("手機阻擋聲音，已改為靜音播放");
+            soundEnabled = false;
+            videoEl.muted = true;
+
+            try {
+              await videoEl.play();
+              videoEl.pause();
+              videoEl.currentTime = 0;
+            } catch (mutedErr) {
+              console.warn("Muted video unlock also failed:", mutedErr);
+            }
+
+            setStatus("手機阻擋聲音，已改為靜音播放");
+          }
         }
       };
 
@@ -251,17 +273,12 @@
             });
           }
 
-          /*
-            這段很重要：
-            必須在使用者點擊按鈕後呼叫 play()，
-            iPhone 才比較願意允許之後影片播放。
-          */
-          await unlockVideo();
+          await unlockVideos();
 
           const mindarSystem = sceneEl.systems["mindar-image-system"];
           await mindarSystem.start();
 
-          setStatus("Scanning... 請將相機對準 target image");
+          setStatus("Scanning... 請將相機對準生日卡片或照片");
         } catch (error) {
           console.error(error);
 
@@ -269,6 +286,43 @@
           buttonGroupEl.hidden = false;
           overlayEl.classList.remove("is-running");
           setStatus("無法開啟相機，請檢查瀏覽器相機權限與 HTTPS 設定。");
+        }
+      };
+
+      const playVideoForTarget = async (videoEl, label) => {
+        if (!videoEl) return;
+
+        pauseAllVideos();
+
+        activeVideoEl = videoEl;
+        videoEl.currentTime = 0;
+        videoEl.muted = !soundEnabled;
+
+        setStatus(soundEnabled ? `${label} found，影片播放中` : `${label} found，靜音播放中`);
+
+        try {
+          await videoEl.play();
+        } catch (err) {
+          console.warn("Video play failed on targetFound, fallback to muted:", err);
+
+          soundEnabled = false;
+          videoEl.muted = true;
+
+          try {
+            await videoEl.play();
+            setStatus(`${label} found，但手機阻擋聲音，已改為靜音播放`);
+          } catch (mutedErr) {
+            console.warn("Muted video play failed:", mutedErr);
+            setStatus(`${label} found，但影片播放被手機阻擋`);
+          }
+        }
+      };
+
+      const pauseVideoForTarget = (videoEl) => {
+        if (videoEl && activeVideoEl === videoEl) {
+          videoEl.pause();
+          activeVideoEl = null;
+          setStatus("Scanning... 請將相機對準生日卡片或照片");
         }
       };
 
@@ -280,42 +334,20 @@
         startAR(false);
       });
 
-      targetEl.addEventListener("targetFound", async () => {
-        setStatus(soundEnabled ? "Target found，影片播放中" : "Target found，靜音播放中");
-
-        if (!danceVideoEl) return;
-
-        danceVideoEl.currentTime = 0;
-        danceVideoEl.muted = !soundEnabled;
-
-        try {
-          await danceVideoEl.play();
-        } catch (err) {
-          console.warn("Video play failed on targetFound, fallback to muted:", err);
-
-          /*
-            如果使用者選擇有聲，但 iPhone 仍然擋住，
-            就退回靜音播放，至少確保畫面出得來。
-          */
-          soundEnabled = false;
-          danceVideoEl.muted = true;
-
-          try {
-            await danceVideoEl.play();
-            setStatus("Target found，但手機阻擋聲音，已改為靜音播放");
-          } catch (mutedErr) {
-            console.warn("Muted video play failed:", mutedErr);
-            setStatus("Target found，但影片播放被手機阻擋");
-          }
-        }
+      targetAEl.addEventListener("targetFound", () => {
+        playVideoForTarget(videoAEl, "Target A");
       });
 
-      targetEl.addEventListener("targetLost", () => {
-        setStatus("Scanning... 請將相機對準 target image");
+      targetAEl.addEventListener("targetLost", () => {
+        pauseVideoForTarget(videoAEl);
+      });
 
-        if (danceVideoEl) {
-          danceVideoEl.pause();
-        }
+      targetBEl.addEventListener("targetFound", () => {
+        playVideoForTarget(videoBEl, "Target B");
+      });
+
+      targetBEl.addEventListener("targetLost", () => {
+        pauseVideoForTarget(videoBEl);
       });
     </script>
   </body>
